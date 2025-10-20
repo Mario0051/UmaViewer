@@ -138,12 +138,15 @@ public class Screenshot : MonoBehaviour
             yield return new WaitForEndOfFrame();
             var tex = GrabFrame(camera, width, height, transparent);
             var bytes = tex.EncodeToPNG();
+            Destroy(tex);
 
             var fileName = $"{fileDirectory}/{frame.ToString().PadLeft(maxNameLength, '0')}.png";
-            File.WriteAllBytes(fileName, bytes);
 
-            Destroy(tex);
+            System.Threading.Tasks.Task.Run(() => File.WriteAllBytes(fileName, bytes));
+
             frame++;
+
+            yield return null;
         }
 
         recording = false;
