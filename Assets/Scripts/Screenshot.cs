@@ -111,11 +111,11 @@ public class Screenshot : MonoBehaviour
     {
         ScreenshotSettings.SequenceButton.GetComponentInChildren<TMPro.TextMeshProUGUI>().text = "Recording...";
         string folderName = string.Format("UmaViewer_{0}", DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss-fff"));
-    #if UNITY_ANDROID && !UNITY_EDITOR
+#if UNITY_ANDROID && !UNITY_EDITOR
         string fileDirectory = Application.persistentDataPath + "/../Screenshots/" + folderName;
-    #else
+#else
         string fileDirectory = Application.dataPath + "/../Screenshots/" + folderName;
-    #endif
+#endif
         Directory.CreateDirectory(fileDirectory);
 
         var camera = GetActiveCamera();
