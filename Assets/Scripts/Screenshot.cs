@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.IO;
+using System.Threading.Tasks;
 using uGIF;
 using UnityEngine;
 using UnityEngine.Rendering.PostProcessing;
@@ -59,6 +60,9 @@ public class Screenshot : MonoBehaviour
         bool oldPpState = ppLayer.enabled;
         ppLayer.enabled = false;
 
+        float originalTimeScale = Time.timeScale;
+        float originalCaptureDelta = Time.captureDeltaTime;
+
         var uma = UmaViewerBuilder.Instance.CurrentUMAContainer;
         var animator = uma.UmaAnimator;
         if (animator == null) yield break;
@@ -68,21 +72,30 @@ public class Screenshot : MonoBehaviour
         var frameRate = animeClip.frameRate;
         var clipFrameCount = Mathf.CeilToInt(clipLength * frameRate);
 
+        Time.captureDeltaTime = 1.0f / frameRate;
+
         StartCoroutine(CaptureToGIFCustom.Instance.Encode(frameRate, quality));
 
         AnimationSettings.ChangeSpeed(0);
 
-        for (int i = 0; i < clipFrameCount; i++)
+        ResetAllPhysicsComponents();
+
+        int warmupCycles = 2;
+        for (int cycle = 0; cycle < warmupCycles; cycle++)
         {
-            AnimationSettings.ChangeProgress((float)i / clipFrameCount);
-            yield return new WaitForFixedUpdate();
+            for (int i = 0; i < clipFrameCount; i++)
+            {
+                AnimationSettings.ChangeProgress((float)i / clipFrameCount);
+                animator.Update(0); 
+                yield return new WaitForEndOfFrame();
+            }
         }
 
         int frame = 0;
         while (frame < clipFrameCount)
         {
             AnimationSettings.ChangeProgress((float)frame / clipFrameCount);
-            yield return new WaitForFixedUpdate();
+            animator.Update(0);
             yield return new WaitForEndOfFrame();
 
             var tex = GrabFrame(camera, width, height, transparent);
@@ -97,6 +110,9 @@ public class Screenshot : MonoBehaviour
         ppLayer.enabled = oldPpState;
         CaptureToGIFCustom.Instance.stop = true;
         ScreenshotSettings.GifButton.interactable = true;
+
+        Time.captureDeltaTime = originalCaptureDelta;
+        Time.timeScale = originalTimeScale;
     }
 
     public void BeginRecordImageSequence()
@@ -123,6 +139,8 @@ public class Screenshot : MonoBehaviour
         bool oldPpState = ppLayer.enabled;
         ppLayer.enabled = false;
 
+        float originalCaptureDelta = Time.captureDeltaTime;
+
         var uma = UmaViewerBuilder.Instance.CurrentUMAContainer;
         var animator = uma.UmaAnimator;
         if (animator == null) yield break;
@@ -135,19 +153,28 @@ public class Screenshot : MonoBehaviour
         var maxNameLength = clipFrameCount.ToString().Length;
         if(maxNameLength == 0) maxNameLength = 1;
 
+        Time.captureDeltaTime = 1.0f / actualFrameRate;
+
         AnimationSettings.ChangeSpeed(0);
 
-        for (int i = 0; i < clipFrameCount; i++)
+        ResetAllPhysicsComponents();
+
+        int warmupCycles = 2;
+        for (int cycle = 0; cycle < warmupCycles; cycle++)
         {
-            AnimationSettings.ChangeProgress((float)i / clipFrameCount);
-            yield return new WaitForFixedUpdate();
+            for (int i = 0; i < clipFrameCount; i++)
+            {
+                AnimationSettings.ChangeProgress((float)i / clipFrameCount);
+                animator.Update(0);
+                yield return new WaitForEndOfFrame(); 
+            }
         }
 
         int frame = 0;
         while (frame < clipFrameCount)
         {
             AnimationSettings.ChangeProgress((float)frame / clipFrameCount);
-            yield return new WaitForFixedUpdate();
+            animator.Update(0);
             yield return new WaitForEndOfFrame();
 
             var tex = GrabFrame(camera, width, height, transparent);
@@ -156,7 +183,9 @@ public class Screenshot : MonoBehaviour
 
             var fileName = $"{fileDirectory}/{frame.ToString().PadLeft(maxNameLength, '0')}.png";
 
-            System.Threading.Tasks.Task.Run(() => File.WriteAllBytes(fileName, bytes));
+            var bytesToWrite = bytes;
+            var nameToWrite = fileName;
+            Task.Run(() => File.WriteAllBytes(nameToWrite, bytesToWrite));
 
             frame++;
         }
@@ -168,8 +197,25 @@ public class Screenshot : MonoBehaviour
         ScreenshotSettings.SequenceButton.interactable = true;
         ScreenshotSettings.SequenceButton.GetComponentInChildren<TMPro.TextMeshProUGUI>().text = "Record PNG Sequence";
 
+        Time.captureDeltaTime = originalCaptureDelta;
+
         var fullpath = Path.GetFullPath(fileDirectory);
         UmaViewerUI.Instance.ShowMessage($"PNG Sequence saved to: {fullpath}", UIMessageType.Success);
+    }
+
+    private void ResetAllPhysicsComponents()
+    {
+        var dynamicBones = FindObjectsOfType<DynamicBone>();
+        foreach(var db in dynamicBones)
+        {
+            db.ResetParticlesPosition(); 
+        }
+
+        var cySprings = FindObjectsOfType<CySpring>();
+        foreach(var cs in cySprings)
+        {
+            cs.Reset();
+        }
     }
 
     public static Texture2D GrabFrame(Camera cam, int width, int height, bool transparent = true)
